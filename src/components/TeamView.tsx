@@ -1,17 +1,24 @@
 import { useState } from 'react';
-import { Plus, Mail, Phone, MoreVertical, Award, Target } from 'lucide-react';
-import { AddTeamMemberModal } from './AddTeamMemberModal';
+import { Plus, Mail, Phone, MoreVertical, Award, Target, Eye, Pencil, Trash, ChevronRight, Users, ArrowLeft } from 'lucide-react';
+import { TeamMemberModal } from './TeamMemberModal';
+import { MemberDetailsModal } from './MemberDetailsModal';
+import { useApi } from '../hooks/useApi';
+import { Project } from '../types';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function TeamView() {
-  const [showAddModal, setShowAddModal] = useState(false);
+  const { data: projects, loading: projectsLoading } = useApi<Project[]>('/projects');
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [showModal, setShowModal] = useState(false); // For Add/Edit
+  const [editingMember, setEditingMember] = useState<any>(null);
+  const [viewingMember, setViewingMember] = useState<any>(null);
 
-  const handleAddMember = (data: any) => {
-    console.log('Nouveau membre ajouté:', data);
-    alert('✅ Membre ajouté avec succès !\n\n📋 Plan d\'onboarding généré automatiquement\n🎓 Tâches d\'intégration créées\n🔔 Notifications envoyées');
-    setShowAddModal(false);
-  };
-
-  const teamMembers = [
+  const initialMembers = [
     {
       id: 1,
       name: 'Jean Dupont',
@@ -142,6 +149,59 @@ export function TeamView() {
     },
   ];
 
+  const [teamMembers, setTeamMembers] = useState(initialMembers);
+
+  const calculateAvailability = (workload: number) => {
+    if (workload >= 90) return 'Surchargé';
+    if (workload >= 70) return 'Occupé';
+    return 'Disponible';
+  };
+
+  const handleSaveMember = (data: any) => {
+    if (editingMember) {
+      // Update existing
+      setTeamMembers(teamMembers.map(m =>
+        m.id === editingMember.id ? {
+          ...m,
+          ...data,
+          availability: calculateAvailability(data.workload)
+        } : m
+      ));
+      console.log('Membre modifié:', data);
+    } else {
+      // Add new
+      const newMember = {
+        ...data,
+        id: Math.max(...teamMembers.map(m => m.id)) + 1,
+        projects: [], // Default
+        objectives: [], // Default
+        trophies: [], // Default
+        availability: calculateAvailability(data.workload)
+      };
+      setTeamMembers([...teamMembers, newMember]);
+      console.log('Nouveau membre ajouté:', newMember);
+      alert('✅ Membre ajouté avec succès !\n\n📋 Plan d\'onboarding généré automatiquement\n🎓 Tâches d\'intégration créées\n🔔 Notifications envoyées');
+    }
+    setShowModal(false);
+    setEditingMember(null);
+  };
+
+  const handleDeleteMember = (id: number) => {
+    if (confirm('Êtes-vous sûr de vouloir supprimer ce membre ?')) {
+      setTeamMembers(teamMembers.filter(m => m.id !== id));
+    }
+  };
+
+  const openEditModal = (member: any) => {
+    setEditingMember(member);
+    setShowModal(true);
+  };
+
+  const openAddModal = () => {
+    setEditingMember(null);
+    setShowModal(true);
+  };
+
   const getWorkloadColor = (workload: number) => {
     if (workload >= 90) return { bg: 'bg-red-100', bar: 'bg-red-600', text: 'text-red-800' };
     if (workload >= 75) return { bg: 'bg-orange-100', bar: 'bg-orange-600', text: 'text-orange-800' };
@@ -155,15 +215,94 @@ export function TeamView() {
     return 'bg-green-100 text-green-800 border-green-200';
   };
 
+  // Filtrer les membres par projet sélectionné
+  const filteredMembers = selectedProject
+    ? teamMembers.filter(member => 
+        member.projects && member.projects.some(project => 
+          project === selectedProject.name || project.toLowerCase().includes(selectedProject.name.toLowerCase())
+        )
+      )
+    : [];
+
+  // Vue de sélection de projet
+  if (!selectedProject) {
+    return (
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Équipe</h1>
+          <p className="text-gray-600 mt-1">
+            Sélectionnez un projet pour voir l'équipe qui travaille dessus
+          </p>
+        </div>
+
+        {/* Project Selection */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {projectsLoading ? (
+            <div className="col-span-full text-center py-12 text-gray-500">
+              Chargement des projets...
+            </div>
+          ) : projects && projects.length > 0 ? (
+            projects.map((project) => {
+              // Compter les membres du projet
+              const projectMembers = teamMembers.filter(member =>
+                member.projects && member.projects.some(p =>
+                  p === project.name || p.toLowerCase().includes(project.name.toLowerCase())
+                )
+              );
+
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => setSelectedProject(project)}
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 text-left hover:shadow-md transition-all hover:border-indigo-300 group"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-lg text-gray-900 group-hover:text-indigo-600 transition-colors">
+                        {project.name}
+                      </h3>
+                      <p className="text-sm text-gray-600 mt-1">{project.description}</p>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-indigo-600 transition-colors" />
+                  </div>
+                  
+                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                    <Users className="w-4 h-4" />
+                    <span>{projectMembers.length} membre{projectMembers.length > 1 ? 's' : ''} dans l'équipe</span>
+                  </div>
+                </button>
+              );
+            })
+          ) : (
+            <div className="col-span-full text-center py-12 text-gray-500">
+              Aucun projet disponible
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Vue de l'équipe du projet sélectionné
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Équipe</h1>
-          <p className="text-gray-600 mt-1">Gérez les membres de l'équipe et leurs objectifs</p>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setSelectedProject(null)}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Retour à la sélection de projet"
+          >
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
+          </button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">Équipe - {selectedProject.name}</h1>
+            <p className="text-gray-600 mt-1">Membres travaillant sur ce projet</p>
+          </div>
         </div>
-        <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors" onClick={() => setShowAddModal(true)}>
+        <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors" onClick={openAddModal}>
           <Plus className="w-5 h-5" />
           Ajouter un membre
         </button>
@@ -172,32 +311,46 @@ export function TeamView() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-lg border border-gray-200">
-          <div className="text-2xl font-bold text-gray-900">{teamMembers.length}</div>
+          <div className="text-2xl font-bold text-gray-900">{filteredMembers.length}</div>
           <div className="text-sm text-gray-600">Membres actifs</div>
         </div>
         <div className="bg-white p-4 rounded-lg border border-green-200 bg-green-50">
           <div className="text-2xl font-bold text-green-900">
-            {teamMembers.filter((m) => m.availability === 'Disponible').length}
+            {filteredMembers.filter((m) => m.availability === 'Disponible').length}
           </div>
           <div className="text-sm text-green-700">Disponibles</div>
         </div>
         <div className="bg-white p-4 rounded-lg border border-red-200 bg-red-50">
           <div className="text-2xl font-bold text-red-900">
-            {teamMembers.filter((m) => m.workload >= 90).length}
+            {filteredMembers.filter((m) => m.workload >= 90).length}
           </div>
           <div className="text-sm text-red-700">Surchargés</div>
         </div>
         <div className="bg-white p-4 rounded-lg border border-gray-200">
           <div className="text-2xl font-bold text-gray-900">
-            {Math.round(teamMembers.reduce((acc, m) => acc + m.workload, 0) / teamMembers.length)}%
+            {filteredMembers.length > 0 ? Math.round(filteredMembers.reduce((acc, m) => acc + m.workload, 0) / filteredMembers.length) : 0}%
           </div>
           <div className="text-sm text-gray-600">Charge moyenne</div>
         </div>
       </div>
 
+      {/* Message si aucun membre */}
+      {filteredMembers.length === 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-500 mb-4">Aucun membre assigné à ce projet</p>
+          <button
+            onClick={openAddModal}
+            className="text-blue-600 hover:underline"
+          >
+            Ajouter un membre à l'équipe
+          </button>
+        </div>
+      )}
+
       {/* Team Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {teamMembers.map((member) => {
+        {filteredMembers.map((member) => {
           const workloadColors = getWorkloadColor(member.workload);
 
           return (
@@ -217,9 +370,29 @@ export function TeamView() {
                         <h3 className="font-bold text-gray-900">{member.name}</h3>
                         <p className="text-sm text-gray-600">{member.role}</p>
                       </div>
-                      <button className="p-1 hover:bg-gray-100 rounded transition-colors">
-                        <MoreVertical className="w-5 h-5 text-gray-400" />
-                      </button>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button className="p-1 hover:bg-gray-100 rounded transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <MoreVertical className="w-5 h-5 text-gray-400" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setViewingMember(member)} className="cursor-pointer">
+                            <Eye className="mr-2 h-4 w-4" />
+                            Consulter
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEditModal(member)} className="cursor-pointer">
+                            <Pencil className="mr-2 h-4 w-4" />
+                            Modifier
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleDeleteMember(member.id)} className="text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50">
+                            <Trash className="mr-2 h-4 w-4" />
+                            Supprimer
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+
                     </div>
                     <div className="flex flex-wrap gap-2 mt-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getAvailabilityColor(member.availability)}`}>
@@ -272,16 +445,30 @@ export function TeamView() {
               </div>
 
               {/* Projects */}
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Projets assignés</h4>
-                <div className="space-y-1">
-                  {member.projects.map((project, idx) => (
-                    <div key={idx} className="text-sm text-gray-600">
-                      • {project}
-                    </div>
-                  ))}
+              {member.projects && member.projects.length > 0 && (
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-2">Projets assignés</h4>
+                  <div className="space-y-1">
+                    {member.projects.map((project, idx) => {
+                      const isSelectedProject = project === selectedProject.name || 
+                        project.toLowerCase().includes(selectedProject.name.toLowerCase());
+                      return (
+                        <div 
+                          key={idx} 
+                          className={`text-sm ${isSelectedProject ? 'text-indigo-600 font-semibold' : 'text-gray-600'}`}
+                        >
+                          • {project}
+                          {isSelectedProject && (
+                            <span className="ml-2 px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs font-medium">
+                              Actuel
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Objectives */}
               <div className="px-6 py-4">
@@ -300,13 +487,12 @@ export function TeamView() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-1.5">
                         <div
-                          className={`h-1.5 rounded-full ${
-                            objective.progress === 100
+                          className={`h-1.5 rounded-full ${objective.progress === 100
                               ? 'bg-green-500'
                               : objective.progress >= 70
-                              ? 'bg-blue-500'
-                              : 'bg-yellow-500'
-                          }`}
+                                ? 'bg-blue-500'
+                                : 'bg-yellow-500'
+                            }`}
                           style={{ width: `${objective.progress}%` }}
                         ></div>
                       </div>
@@ -319,11 +505,23 @@ export function TeamView() {
         })}
       </div>
 
-      {/* Add Team Member Modal */}
-      {showAddModal && (
-        <AddTeamMemberModal
-          onClose={() => setShowAddModal(false)}
-          onSubmit={handleAddMember}
+      {/* Team Member Modal (Add/Edit) */}
+      {showModal && (
+        <TeamMemberModal
+          member={editingMember}
+          onClose={() => {
+            setShowModal(false);
+            setEditingMember(null);
+          }}
+          onSubmit={handleSaveMember}
+        />
+      )}
+
+      {/* Member Details Modal (View) */}
+      {viewingMember && (
+        <MemberDetailsModal
+          member={viewingMember}
+          onClose={() => setViewingMember(null)}
         />
       )}
     </div>

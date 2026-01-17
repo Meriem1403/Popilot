@@ -20,9 +20,6 @@ export function TasksViewWithTestData() {
           <h1 className="text-3xl font-bold text-gray-900">Tâches</h1>
           <p className="text-gray-600 mt-1">
             Sélectionnez un projet pour voir ses tâches
-            <span className="ml-2 text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded font-medium">
-              🧪 MODE TEST - Données de démonstration
-            </span>
           </p>
         </div>
 
@@ -192,9 +189,6 @@ export function TasksViewWithTestData() {
             <h1 className="text-3xl font-bold text-gray-900">Tâches - {selectedProjectData?.name}</h1>
             <p className="text-gray-600 mt-1">
               Gérez et suivez toutes les tâches en cours
-              <span className="ml-2 text-xs px-2 py-1 bg-orange-100 text-orange-700 rounded font-medium">
-                🧪 MODE TEST - Données de démonstration
-              </span>
             </p>
           </div>
           <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">

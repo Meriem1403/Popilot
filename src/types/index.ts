@@ -5,6 +5,7 @@ export * from './meetings';
 export * from './documents';
 export * from './skills';
 export * from './planning';
+export * from './positions';
 
 export interface Project {
   id: string;

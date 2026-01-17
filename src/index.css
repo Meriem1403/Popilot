@@ -3489,3 +3489,9 @@ html {
     transform: rotate(360deg);
   }
 }
+
+/* Ensure DropdownContent has a background */
+div[role="menu"] {
+  background-color: white;
+  z-index: 50;
+}

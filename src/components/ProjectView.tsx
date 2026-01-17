@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, Filter, MoreVertical, Calendar, Users as UsersIcon, DollarSign, Edit2, Trash2, Archive } from 'lucide-react';
 import { useApi, apiDelete, apiPut } from '../hooks/useApi';
 import { Project } from '../types';
 import { CreateProjectModal } from './CreateProjectModal';
 import { EditProjectModal } from './EditProjectModal';
+import { TEST_MEMBERS, TEST_POSITIONS } from '../data/testPositions';
+import { TeamMember } from '../types/positions';
 
 export function ProjectView() {
   const { data: projects, loading, refetch } = useApi<Project[]>('/projects');
@@ -76,6 +78,54 @@ export function ProjectView() {
     if (statusFilter === 'all') return true;
     return project.status === statusFilter;
   }) || [];
+
+  // Fonction pour obtenir les membres d'un projet
+  const getProjectMembers = (project: Project): TeamMember[] => {
+    // Trouver les positions assignées à ce projet (par ID ou par nom)
+    let projectPositions = TEST_POSITIONS.filter(p => 
+      p.projectId === project.id || 
+      (project.name && p.projectName.toLowerCase().includes(project.name.toLowerCase())) ||
+      (project.name && project.name.toLowerCase().includes(p.projectName.toLowerCase()))
+    );
+    
+    // Si aucune position trouvée, essayer de trouver par correspondance partielle du nom
+    if (projectPositions.length === 0 && project.name) {
+      const projectNameLower = project.name.toLowerCase();
+      projectPositions = TEST_POSITIONS.filter(p => {
+        const positionProjectNameLower = p.projectName.toLowerCase();
+        return positionProjectNameLower.includes(projectNameLower) || 
+               projectNameLower.includes(positionProjectNameLower) ||
+               projectNameLower.includes('popy') ||
+               positionProjectNameLower.includes('popy');
+      });
+    }
+    
+    // Si aucune position trouvée et que le projet contient "POPY" ou "popy", utiliser toutes les positions de test
+    if (projectPositions.length === 0 && project.name && project.name.toLowerCase().includes('popy')) {
+      projectPositions = TEST_POSITIONS.filter(p => p.projectId === 'popy');
+    }
+    
+    // Récupérer tous les IDs de membres assignés à ces positions
+    const memberIds = new Set<string>();
+    projectPositions.forEach(position => {
+      position.assignedMembers.forEach(memberId => memberIds.add(memberId));
+    });
+    
+    // Si des membres sont trouvés via les positions, les retourner
+    if (memberIds.size > 0) {
+      return TEST_MEMBERS.filter(member => memberIds.has(member.id));
+    }
+    
+    // Si aucune position trouvée pour ce projet spécifique, utiliser toutes les positions de test
+    // (fallback pour afficher au moins les membres de test)
+    const allMemberIds = new Set<string>();
+    TEST_POSITIONS.forEach(position => {
+      position.assignedMembers.forEach(memberId => allMemberIds.add(memberId));
+    });
+    
+    // Retourner tous les membres qui ont au moins une position assignée
+    return TEST_MEMBERS.filter(member => allMemberIds.has(member.id));
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -234,19 +284,43 @@ export function ProjectView() {
                   <div>
                     <div className="text-gray-500 text-xs">Équipe</div>
                     <div className="flex -space-x-2">
-                      {project.team.slice(0, 3).map((member, idx) => (
-                        <div
-                          key={idx}
-                          className="w-6 h-6 rounded-full bg-blue-600 text-white text-xs flex items-center justify-center border-2 border-white font-medium"
-                        >
-                          {member}
-                        </div>
-                      ))}
-                      {project.team.length > 3 && (
-                        <div className="w-6 h-6 rounded-full bg-gray-300 text-gray-600 text-xs flex items-center justify-center border-2 border-white font-medium">
-                          +{project.team.length - 3}
-                        </div>
-                      )}
+                      {(() => {
+                        const projectMembers = getProjectMembers(project);
+                        const displayMembers = projectMembers.slice(0, 3);
+                        
+                        if (projectMembers.length === 0) {
+                          return (
+                            <span className="text-xs text-gray-400">Aucun membre</span>
+                          );
+                        }
+                        
+                        return (
+                          <>
+                            {displayMembers.map((member) => (
+                              <div
+                                key={member.id}
+                                className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center font-medium"
+                                title={member.name}
+                                style={{
+                                  backgroundColor: member.photoUrl ? 'transparent' : '#6366f1',
+                                  backgroundImage: member.photoUrl ? `url(${member.photoUrl})` : undefined,
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center',
+                                }}
+                              >
+                                {!member.photoUrl && (
+                                  <span className="text-white text-xs">{member.initials}</span>
+                                )}
+                              </div>
+                            ))}
+                            {projectMembers.length > 3 && (
+                              <div className="w-6 h-6 rounded-full bg-gray-300 text-gray-600 text-xs flex items-center justify-center border-2 border-white font-medium">
+                                +{projectMembers.length - 3}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

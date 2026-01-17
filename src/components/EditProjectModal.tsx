@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, Users } from 'lucide-react';
 import { apiPut } from '../hooks/useApi';
 import { Project } from '../types';
+import { TEST_MEMBERS, TEST_POSITIONS } from '../data/testPositions';
+import { TeamMember } from '../types/positions';
 
 interface EditProjectModalProps {
   project: Project;
@@ -9,21 +11,52 @@ interface EditProjectModalProps {
   onSuccess: () => void;
 }
 
-// Liste des membres disponibles (à terme, cela pourrait venir d'une API)
-const availableMembers = [
-  { id: '1', name: 'Jean Dupont', initials: 'JD', color: 'bg-blue-600' },
-  { id: '2', name: 'Marie Martin', initials: 'MM', color: 'bg-purple-600' },
-  { id: '3', name: 'Pierre Dubois', initials: 'PD', color: 'bg-green-600' },
-  { id: '4', name: 'Sophie Bernard', initials: 'SB', color: 'bg-orange-600' },
-  { id: '5', name: 'Luc Petit', initials: 'LP', color: 'bg-pink-600' },
-  { id: '6', name: 'Emma Roux', initials: 'ER', color: 'bg-indigo-600' },
-];
-
 export function EditProjectModal({ project, onClose, onSuccess }: EditProjectModalProps) {
-  // Convertir les initiales existantes en IDs de membres
-  const initialMemberIds = availableMembers
-    .filter(m => project.team.includes(m.initials))
-    .map(m => m.id);
+  // Récupérer les membres assignés au projet via les positions
+  const projectMembers = useMemo(() => {
+    const projectPositions = TEST_POSITIONS.filter(p => 
+      p.projectId === project.id || 
+      (project.name && p.projectName.toLowerCase().includes(project.name.toLowerCase()))
+    );
+    const memberIds = new Set<string>();
+    projectPositions.forEach(position => {
+      position.assignedMembers.forEach(memberId => memberIds.add(memberId));
+    });
+    return TEST_MEMBERS.filter(member => memberIds.has(member.id));
+  }, [project.id, project.name]);
+
+  // Tous les membres disponibles (membres du projet + tous les autres membres)
+  const availableMembers = useMemo(() => {
+    const projectMemberIds = new Set(projectMembers.map(m => m.id));
+    const allMembers = [...projectMembers];
+    
+    // Ajouter les autres membres qui ne sont pas déjà dans le projet
+    TEST_MEMBERS.forEach(member => {
+      if (!projectMemberIds.has(member.id)) {
+        allMembers.push(member);
+      }
+    });
+    
+    return allMembers.map(member => ({
+      id: member.id,
+      name: member.name,
+      initials: member.initials,
+      color: member.photoUrl ? 'bg-gradient-to-br from-indigo-500 to-purple-600' : 'bg-gradient-to-br from-indigo-500 to-purple-600',
+      photoUrl: member.photoUrl,
+    }));
+  }, [projectMembers]);
+
+  // Convertir les membres existants du projet en IDs
+  const initialMemberIds = useMemo(() => {
+    // Si project.team contient des initiales (ancien format), les convertir
+    if (project.team && project.team.length > 0 && typeof project.team[0] === 'string') {
+      return availableMembers
+        .filter(m => project.team.includes(m.initials))
+        .map(m => m.id);
+    }
+    // Sinon, utiliser les membres déjà assignés via les positions
+    return projectMembers.map(m => m.id);
+  }, [project.team, availableMembers, projectMembers]);
 
   const [formData, setFormData] = useState({
     name: project.name,
@@ -32,8 +65,16 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
     startDate: project.startDate || '',
     deadline: project.deadline,
     budget: project.budget.total.toString(),
-    selectedMembers: initialMemberIds,
+    selectedMembers: [] as string[],
   });
+
+  // Mettre à jour les membres sélectionnés quand initialMemberIds change
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      selectedMembers: initialMemberIds,
+    }));
+  }, [initialMemberIds]);
 
   const toggleMember = (memberId: string) => {
     setFormData({
@@ -47,6 +88,7 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Récupérer les initiales des membres sélectionnés
       const selectedMemberInitials = availableMembers
         .filter(m => formData.selectedMembers.includes(m.id))
         .map(m => m.initials);
@@ -190,9 +232,17 @@ export function EditProjectModal({ project, onClose, onSuccess }: EditProjectMod
                       : 'border-gray-200 hover:border-gray-300 bg-white'
                   }`}
                 >
-                  <div className={`w-10 h-10 rounded-full ${member.color} flex items-center justify-center text-white font-semibold`}>
-                    {member.initials}
-                  </div>
+                  {member.photoUrl ? (
+                    <img
+                      src={member.photoUrl}
+                      alt={member.name}
+                      className="w-10 h-10 rounded-full object-cover border-2 border-white"
+                    />
+                  ) : (
+                    <div className={`w-10 h-10 rounded-full ${member.color} flex items-center justify-center text-white font-semibold`}>
+                      {member.initials}
+                    </div>
+                  )}
                   <div className="flex-1 text-left">
                     <div className="text-sm font-medium text-gray-900">{member.name}</div>
                     {formData.selectedMembers.includes(member.id) && (
